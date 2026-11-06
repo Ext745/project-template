@@ -38,7 +38,7 @@ python3 tools/audit-all.py --local ~/workbench/ai_projects --no-github   # local
 Read-only: it mirror-clones into `~/.cache/repo-audit/` and writes `audit-<date>.md` there (mode 600, values redacted). Public repos with secrets come first, plus what to do about each finding.
 
 ## Retrofitting an existing repo
-- [ ] Copy in: `AGENTS.md` + `CLAUDE.md` symlink, `Makefile`, `tools/`, `.pre-commit-config.yaml`, `.gitignore` entries, `.github/workflows/ci.yml`, `TESTING.md`, `STATUS.md`, `CHANGELOG.md`
+- [ ] Copy in: `AGENTS.md` + `CLAUDE.md` symlink, `Makefile`, `tools/`, `.pre-commit-config.yaml`, `.gitleaks.toml`, `.gitignore` entries, `.github/workflows/ci.yml`, `TESTING.md`, `STATUS.md`, `CHANGELOG.md`
 - [ ] Remove any per-repo copies of policy / issue / PR templates that should come from `Ext745/.github`
 - [ ] Add the maturity / tested-on / soak line and the "How this project is built" section to the README
 - [ ] Write `GOAL.md` from what the project actually turned out to be
