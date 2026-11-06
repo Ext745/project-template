@@ -4,7 +4,8 @@
 Best-effort pattern matching, not a guarantee. It catches the common leaks in
 hardware/network projects: modem identifiers (IMEI/IMSI/ICCID), phone numbers,
 WireGuard/base64 keys, PEM private keys, credentials in key=value or AT
-commands, MAC addresses, public IPv4/IPv6 addresses and emails. Private
+commands, prefixed names such as CONFIG_WIFI_PASSWORD, MQTT_PASS or SETUP_KEY
+when they hold a literal, MAC addresses, public IPv4/IPv6 addresses and emails. Private
 address ranges (RFC1918, loopback, link-local, CGNAT 100.64/10) are kept.
 
 Usage:
@@ -30,6 +31,58 @@ _PEM = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S
 )
 
+_CRED_WORDS = (r"pass(?:word|wd|phrase)?|pwd|secret|token|psk|presharedkey"
+               r"|(?:api|auth|access|setup|private)[_-]?key")
+_QUOTED = r"""[bBrRuU]?(?:"[^"\n]*"|'[^'\n]*')"""
+_QUOTED_LIST = rf"{_QUOTED}(?:\s*,\s*{_QUOTED})*"
+# NAME = "x", WIFI_PASS: "x", "api_key": "x", char pass[] = "x", AP_SSID, AP_PASS = "a", "b"
+_NAMED_CRED = re.compile(
+    rf"""(?ix)(?:(?<=[A-Za-z0-9])(?P<sep>[_-])|(?<![A-Za-z0-9_-]))(?:{_CRED_WORDS})\b
+    (?P<close>["'](?=:|\s*=>))?(?:\[\d*\])?\s*(?::=|=>|=|:)\s*(?P<val>{_QUOTED_LIST}|\S+)""")
+# #define WIFI_PASS "x"
+_DEFINE_CRED = re.compile(
+    rf"(?i)^\s*\#\s*define\s+(?:\w*_)?(?:{_CRED_WORDS})\s+(?P<val>{_QUOTED})")
+_TEMPLATE_VALUE = re.compile(r"\$\{|\$\(|\$[A-Za-z_]|%s|%\(|\{\{|\{\}|^<.*>$|^\*+$")
+_CODE_VALUE = re.compile(
+    r"^[$<{(\[&*%'\"]|^0x[0-9a-f]+$|^\d+$|[()|]|=>|->|[,;]$|^\w+(?:\.\w+)+$"
+    r"|^(?:none|null|nil|true|false|yes|no|read|write|str|string|int|bool|boolean|number|bytes|any|undefined)$",
+    re.I)
+_ENV_LINE_HEAD = re.compile(r"\s*(?:-\s+)?(?:export\s+)?[\"']?[A-Za-z0-9_-]*")
+
+
+def _literal_is_secret(value, name):
+    """A real literal: not empty, not a template, and not just the variable's own name."""
+    if not value or _TEMPLATE_VALUE.search(value):
+        return False
+    bare = re.sub(r"[^a-z0-9]", "", value.lower())
+    return not bare or bare not in re.sub(r"[^a-z0-9]", "", name.lower())
+
+
+def _named_cred(m):
+    """Flag literals only. Names like CLK_PASSWD = 0x5a or ap_pass = cfg.pass are code."""
+    val = m["val"]
+    start = m.start()
+    while start and (m.string[start - 1].isalnum() or m.string[start - 1] in "_-"):
+        start -= 1
+    name = m.string[start:m.start("val")]
+    if m.groupdict().get("close") and name.strip("\"':= ").istitle() and not m["sep"]:
+        return m.group(0)  # "Password": "Contrasena" is a UI label, not a credential
+    literals = re.findall(r"""["']([^"'\n]*)["']""", val)
+    if re.match(r"[bBrRuU]?[\"']", val):
+        secret = any(_literal_is_secret(v, name) for v in literals)
+    else:
+        # Unquoted is too ambiguous in code, so only NAME=value config lines count.
+        tail = m.string[m.end():].strip()
+        secret = (m.groupdict().get("sep") is not None
+                  and _ENV_LINE_HEAD.fullmatch(m.string[:m.start()]) is not None
+                  and (not tail or tail.startswith("#"))
+                  and not _CODE_VALUE.search(val)
+                  and _literal_is_secret(val, name))
+    if not secret:
+        return m.group(0)
+    return m.string[m.start():m.start("val")] + "<REDACTED>"
+
+
 # (kind, regex, replacement). Order matters: specific before generic.
 _RULES = [
     ("at-credentials", re.compile(r'(AT\+(?:CGAUTH|QICSGP|CSTT)=[^"\r\n]*)"[^"\r\n]*"\s*,\s*"[^"\r\n]*"', re.I),
@@ -37,6 +90,8 @@ _RULES = [
     ("credential", re.compile(
         r"(?i)\b(password|passwd|pwd|secret|token|api[_-]?key|private[_-]?key|presharedkey|psk)(\s*[=:]\s*)(\"[^\"]*\"|'[^']*'|\S+)"),
      r"\1\2<REDACTED>"),
+    ("credential", _NAMED_CRED, _named_cred),
+    ("credential", _DEFINE_CRED, _named_cred),
     ("wireguard-key", re.compile(r"(?<![A-Za-z0-9+/])[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=(?![A-Za-z0-9+/=])"),
      "<KEY>"),
     ("email", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"), "<EMAIL>"),
@@ -74,9 +129,10 @@ def _scrub_line(line, findings=None):
             findings.append(kind)
 
     for kind, rx, repl in _RULES:
-        line, n = rx.subn(repl, line)
-        if n:
+        new = rx.sub(repl, line)
+        if new != line:
             note(kind)
+            line = new
 
     def ip_repl(tag):
         def _r(m):
@@ -184,12 +240,40 @@ def self_test():
         ("endpoint 8.8.8.8:51820", "<IPV4>"),
         ("addr 2001:4860:4860::8888", "<IPV6>"),
         ("contact me@example.org", "<EMAIL>"),
+        ('CONFIG_WIFI_PASSWORD="fake-wifi"', "<REDACTED>"),
+        ("MQTT_PASS=fakevalue9", "<REDACTED>"),
+        ("export WIFI_PSK=fakevalue9  # home", "<REDACTED>"),
+        ("  - MARIADB_ROOT_PASSWORD=fakevalue9", "<REDACTED>"),
+        ('#define WIFI_PASS "fake-wifi"', "<REDACTED>"),
+        ('static char ap_pass[] = "fake-wifi";', "<REDACTED>"),
+        ('"wifi_password": "fake-wifi",', "<REDACTED>"),
+        ('NETBIRD_SETUP_KEY = "fake-setup"', "<REDACTED>"),
+        ('"password": "fake-wifi"', "<REDACTED>"),
     ]
+    tuple_line = 'AP_SSID, AP_PASS = "bench-ap", "fake-wifi"'
+    if "fake-wifi" in scrub_text(tuple_line):
+        ok = False
+        print(f"FAIL tuple: {tuple_line!r}")
     keep = [
         "lan 192.168.1.20 and netbird 100.92.1.4 and lo 127.0.0.1",
         "time 12:30:45 uptime 3600 s, 1730892000123 ms",
         "freq 14.074 MHz, 28.400 MHz, sample rate 64000000",
         "ok 356938035643809 scrub:allow",
+        'SIG_BYPASS = "enabled"',
+        "pass: 12 fail: 0",
+        "CLK_PASSWD = 0x5a000000",
+        "ap_pass = cfg.ap_pass",
+        "max_token_len = 64",
+        'CONFIG_WIFI_PASSWORD=""',
+        '#define NVS_KEY_WIFI_PASS "wifi_pass"',
+        'X_HARNESS_TOKEN = "x-harness-token"',
+        'FIELD_PASSWORD = "password"',
+        'MQTT_PASS="${MQTT_PASS}"',
+        "API_TOKEN: ${{ github.token }}",
+        "if ap_pass == other:",
+        '"Password": "Fake Label",',
+        'printf("%s", ok ? "PASS" : "FAIL");',
+        "  id_token: write",
     ]
     ok = True
     for text, expect in cases:
