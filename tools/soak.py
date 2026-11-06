@@ -15,8 +15,8 @@ Modes
   --follow PATH    additionally tail a log file for error/reset patterns
 
 Typical uses
-  # SDR / host software, 72 h, restart on crash and count it
-  soak.py --rig A --hours 72 --restart --cmd "./build/rx888_stream -s 64000000" \
+  # Host software, 72 h, restart on crash and count it
+  soak.py --rig A --hours 72 --restart --cmd "./build/app --config rig-a.conf" \
           --error-pattern "overrun|dropped|ERROR"
   # ESP32 over serial: count resets and panics from the boot log
   soak.py --rig B --hours 168 --cmd "cat /dev/ttyACM0" \
