@@ -102,14 +102,24 @@ def local_repos(paths):
 
 # ---------- fetching ----------
 
+def _last_line(r, default):
+    text = (r.stderr or r.stdout).strip()
+    return text.splitlines()[-1] if text else default
+
+
 def mirror(repo, workdir):
     dest = workdir / (repo["name"].replace("/", "__") + ".git")
-    if dest.exists():
-        r = run(["git", "-C", str(dest), "remote", "update", "--prune"])
-    else:
+    if not dest.exists():
         r = run(["gh", "repo", "clone", repo["name"], str(dest), "--", "--mirror", "--quiet"])
+        if r.returncode:
+            raise RuntimeError(_last_line(r, "clone failed"))
+    # gh adds an "upstream" remote to forks. Its branches aren't in this repo, so drop
+    # them, or a fork's report counts upstream's commits as the owner's. Older mirrors
+    # may already hold those refs; removing the remote and pruning cleans them too.
+    run(["git", "-C", str(dest), "remote", "remove", "upstream"])
+    r = run(["git", "-C", str(dest), "fetch", "--prune", "origin"])
     if r.returncode:
-        raise RuntimeError((r.stderr or r.stdout).strip().splitlines()[-1] if (r.stderr or r.stdout) else "clone failed")
+        raise RuntimeError(_last_line(r, "fetch failed"))
     return dest
 
 
