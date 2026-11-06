@@ -36,4 +36,4 @@ audit:
 setup:
 	@command -v gitleaks >/dev/null || { echo "gitleaks not found. Install it first: https://github.com/gitleaks/gitleaks/releases"; exit 1; }
 	@command -v pre-commit >/dev/null || pipx install pre-commit || python3 -m pip install --user pre-commit
-	pre-commit install
+	pre-commit install --allow-missing-config   # hooks are shared: other branches may not have the config yet
