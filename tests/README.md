@@ -19,7 +19,7 @@ Hardware-in-the-loop tests must **skip cleanly, not fail,** when the hardware is
 
 Example:
 ```bash
-make soak RIG=A HOURS=72 SOAK_CMD="./build/app --config rig-a.conf" \
-     SOAK_ARGS='--error-pattern "ERROR|overrun" --max-rss-growth 1 --config "64 MS/s, HF"'
+make soak RIG=A HOURS=72 SOAK_CMD="cat /dev/ttyACM0" \
+     SOAK_ARGS='--reset-pattern "rst:0x|Rebooting" --error-pattern "Guru Meditation" --config "ESP32-S3, Wi-Fi + MQTT"'
 ```
 Run `python3 tools/soak.py --help` for modes: running a command, attaching to a PID (e.g. a Docker container), or reading an MCU over serial.

@@ -5,7 +5,7 @@ Code in this repo is verified by running it on **real target hardware for extend
 ## Test rigs
 | Rig | Hardware | Firmware / OS | Peripherals / setup | Notes |
 |---|---|---|---|---|
-| A | <e.g. RX-888 MkII on Ubuntu 24.04 x86 desktop> | <version> | <antenna, USB port, cooling> | |
+| A | <e.g. ESP32-S3 dev board, USB to an Ubuntu 24.04 x86 desktop> | <version> | <antenna, USB port, cooling> | |
 
 ## Soak / long-run log
 Rows are added by `tools/soak.py --append` (or by hand for runs made before the tool existed; mark those *backfilled*).
