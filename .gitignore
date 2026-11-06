@@ -1,0 +1,28 @@
+# --- secrets: never commit ---
+.env
+.env.*
+*.pem
+*.key
+*.p12
+id_rsa*
+id_ed25519*
+wg*.conf
+secrets/
+.prepublish-deny
+
+# --- soak evidence ---
+# samples.csv and summary.json are committed (small, the evidence).
+# Raw output can be large: attach it to the release instead.
+tests/soak/logs/**/output.log
+
+# --- general ---
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+.pio/
+.vscode/
+.idea/
+*.swp
+.DS_Store
