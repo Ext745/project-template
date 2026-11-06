@@ -192,7 +192,7 @@ _PEM_START = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
 def scan_git_history(repo=".", excludes=DEFAULT_HISTORY_EXCLUDES):
     """Scan lines added in every commit on every ref. Works on bare/mirror repos.
     Returns a list of dicts: {commit, file, kind}, one per unique (commit, file, kind)."""
-    cmd = ["git", "-C", repo, "log", "-p", "--all", "--no-color", "--no-ext-diff",
+    cmd = ["git", "-C", repo, "log", "-p", "--all", "--full-history", "--no-color", "--no-ext-diff",
            "--format=COMMIT %H", "--", "."] + [f":!{e}" for e in excludes]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                             text=True, errors="replace")
