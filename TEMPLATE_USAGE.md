@@ -22,6 +22,7 @@ Tag a release when the project reaches a new maturity level. List the soak runs 
 History goes public with the repo. Anything ever committed is exposed, even if it was deleted later.
 1. `make prepublish`: checks secrets and personal data in **full history**, forbidden strings from `.prepublish-deny`, large files, LICENSE and README.
 2. If history is dirty: rewrite it with `git filter-repo`, or publish a fresh single-commit history. **Rotate any secret that was ever committed.**
+   A history finding that is a false positive (a version number read as an IP, hex data read as an IMEI) can't take `scrub:allow` after the fact. Read the line, then list it in `.prepublish-allow` as `<kind> <fingerprint>`, with the fingerprint `make prepublish` prints. Commit that file: it holds only hashes. Only that exact line is allowed, and any new finding still fails.
 3. Flip visibility, then:
    ```bash
    gh repo edit Ext745/<repo> --add-topic ai-assisted,hardware-tested
